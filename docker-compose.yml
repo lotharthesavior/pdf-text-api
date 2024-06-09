@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+
+  pdfservice:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pdf_service
+    volumes:
+      - .:/app
+    ports:
+      - "8181:80"
+    networks:
+      mynetwork: {}
+
+networks:
+  mynetwork:
+    external: true
+    name: ${NETWORK_NAME}
