@@ -5,14 +5,14 @@ import pytest
 from flask import Flask
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from components.upload import insight_upload
+from app.components.documents import documents
 
 @pytest.fixture
 def app():
     app = Flask(__name__)
     app.config['UPLOAD_FOLDER'] = 'uploads'
     app.config['ALLOWED_EXTENSIONS'] = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
-    app.register_blueprint(insight_upload, url_prefix='/upload')
+    app.register_blueprint(documents, url_prefix='/documents')
 
     if not os.path.exists('uploads'):
         os.makedirs('uploads')
