@@ -6,7 +6,7 @@ from werkzeug.exceptions import HTTPException
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from app import handle_http_exception
-from components.pdf_toolset import pdf_toolset
+from app.components.pdf_toolset import pdf_toolset
 
 @pytest.fixture
 def app():

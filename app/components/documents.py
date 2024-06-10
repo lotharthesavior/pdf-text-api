@@ -1,7 +1,11 @@
-from flask import Blueprint, request, current_app
+from flask import Blueprint, request, current_app, jsonify, make_response
 from werkzeug.utils import secure_filename
 import os
 import logging
+import uuid
+
+from app.extensions import db
+from app.models import Document
 
 documents = Blueprint('upload', __name__)
 
@@ -13,14 +17,49 @@ def allowed_file(filename):
 @documents.route('/', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
-        return 'No file part'
+        return make_response(jsonify({
+            'status': 'error',
+            'result': 'No file part'
+        }), 422)
+
     file = request.files['file']
+
     if file.filename == '':
         logger.info('No selected file')
-        return 'No selected file'
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], filename))
+        return make_response(jsonify({
+            'status': 'error',
+            'result': 'No selected file'
+        }), 422)
+
+    if file and not allowed_file(file.filename):
+        return make_response(jsonify({
+            'status': 'error',
+            'result': 'File not allowed'
+        }), 422)
+
+    filename = secure_filename(file.filename)
+    unique_filename = f"{uuid.uuid4()}_{filename}"
+    filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename)
+
+    try:
+        file.save(filepath)
         logger.info(f'File {filename} uploaded')
-        return 'File successfully uploaded'
-    return 'File not allowed'
+
+        document_record = Document(
+            name=filename,
+            path=filepath
+        )
+        db.session.add(document_record)
+        db.session.commit()
+        logger.info(f'Document {filename} persisted')
+    except Exception as e:
+        db.session.rollback()
+        os.remove(filepath)
+        logger.error(f'Error saving document: {e}')
+        return make_response(jsonify({
+            'status': 'error',
+            'result': 'Internal Server Error',
+            'error': str(e)
+        }), 500)
+
+    return make_response(jsonify(document_record.to_dict()), 200)

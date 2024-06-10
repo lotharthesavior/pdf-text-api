@@ -1,11 +1,9 @@
-from app.exceptions.exception_handler import handle_http_exception
 from app.components.documents import documents
 from app.components.pdf_toolset import pdf_toolset
+from app.exceptions.exception_handler import handle_http_exception
+from app.extensions import db
 from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
 from werkzeug.exceptions import HTTPException
-
-db = SQLAlchemy()
 
 def create_app(config_class='app.config.Config'):
     app = Flask(__name__)
