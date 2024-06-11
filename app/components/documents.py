@@ -2,15 +2,13 @@ from flask import Blueprint, request, current_app, jsonify, make_response
 from sqlalchemy import select
 from werkzeug.utils import secure_filename
 import os
-import logging
 import uuid
 
+from app.logger import logger
 from app.extensions import db
 from app.models import Document
 
 documents = Blueprint('upload', __name__)
-
-logger = logging.getLogger(__name__)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in current_app.config['ALLOWED_EXTENSIONS']
@@ -56,7 +54,9 @@ def upload_file():
     except Exception as e:
         db.session.rollback()
         os.remove(filepath)
-        logger.error(f'Error saving document: {e}')
+        logger.error(f'Error saving document.', {
+            'error': str(e)
+        })
         return make_response(jsonify({
             'status': 'error',
             'result': 'Internal Server Error',
@@ -72,10 +72,93 @@ def list_documents():
         results = db.session.execute(stmt).scalars().all()
         documents = [doc.to_dict() for doc in results]
     except Exception as e:
+        logger.error('Error listing documents', {
+            'error': str(e),
+        })
         return make_response(jsonify({
             'status': 'error',
             'result': 'Internal Server Error',
             'error': str(e)
         }), 500)
 
-    return make_response(jsonify(documents), 200)
+    return (make_response(jsonify(documents), 200))
+
+@documents.route('/<int:id>', methods=['GET'])
+def get_document_by_id(id: int):
+    try:
+        document = db.session.get(Document, id)
+        if document is None:
+            return make_response(jsonify({
+                'status': 'error',
+                'result': f'No document found with id {id}'
+            }), 404)
+
+        document_dict = document.to_dict()
+    except Exception as e:
+        logger.error('Error getting document by id', {
+            'error': str(e),
+            'id': id
+        })
+        return make_response(jsonify({
+            'status': 'error',
+            'result': 'Internal Server Error',
+            'error': str(e)
+        }), 500)
+
+    return make_response(jsonify(document_dict), 200)
+
+@documents.route('/<int:id>', methods=['PATCH'])
+def patch_document_by_id(id: int):
+    try:
+        document = db.session.get(Document, id)
+        if document is None:
+            return make_response(jsonify({
+                'status': 'error',
+                'result': f'No document found with id {id}'
+            }), 404)
+
+        data = request.json
+        if 'name' in data:
+            document.name = data['name']
+        if 'path' in data:
+            document.path = data['path']
+
+        db.session.commit()
+    except Exception as e:
+        logger.error(f'Error patching document: {str(e)}', {
+            'error': str(e),
+            'id': id
+        })
+        return make_response(jsonify({
+            'status': 'error',
+            'result': 'Internal Server Error',
+            'error': str(e)
+        }), 500)
+
+    return make_response(jsonify(document.to_dict()), 200)
+
+@documents.route('/<int:id>', methods=['DELETE'])
+def delete_document_by_id(id: int):
+    try:
+        document = db.session.get(Document, id)
+        if document is None:
+            return make_response(jsonify({
+                'status': 'error',
+                'result': f'No document found with id {id}'
+            }), 404)
+
+        db.session.delete(document)
+        db.session.commit()
+    except Exception as e:
+        print(str(e))
+        logger.error('Error getting document by id', {
+            'error': str(e),
+            'id': id
+        })
+        return make_response(jsonify({
+            'status': 'error',
+            'result': 'Internal Server Error',
+            'error': str(e)
+        }), 500)
+
+    return make_response('', 204)

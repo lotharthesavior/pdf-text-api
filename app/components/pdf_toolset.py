@@ -2,10 +2,9 @@ from flask import Blueprint, request, jsonify, abort
 from pypdf import PdfReader
 import logging
 import os
+from app.logger import logger
 
 pdf_toolset = Blueprint('pdf_toolset', __name__)
-
-logger = logging.getLogger(__name__)
 
 def validate_text_input(pdf_file: str, page):
     # Validate pdf_file

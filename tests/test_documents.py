@@ -2,10 +2,13 @@ import os
 import uuid
 from io import BytesIO
 import pytest
+from flask import jsonify
 
 from app import create_app
 from app.database.factories.DocumentFactory import DocumentFactory
 from app.extensions import db
+from app.models import Document
+
 
 class TestConfig:
     TESTING = True
@@ -84,7 +87,7 @@ def test_upload_file_successfully(client, monkeypatch):
     if os.path.exists(expected_filepath):
         os.remove(expected_filepath)
 
-def test_list_documents_successfully(client, monkeypatch):
+def test_list_documents_successfully(client):
     document1 = DocumentFactory()
     db.session.commit()
 
@@ -98,3 +101,38 @@ def test_list_documents_successfully(client, monkeypatch):
     assert len(response_json) == 2
     assert response_json[0]['name'] == document1.name
     assert response_json[1]['name'] == document2.name
+
+def test_get_single_document_successfully(client):
+    document = DocumentFactory()
+    db.session.commit()
+
+    response = client.get(f'/documents/{document.id}')
+    assert response.status_code == 200
+
+    response_json = response.get_json()
+    assert response_json['id'] == document.id
+    assert response_json['name'] == document.name
+    assert response_json['path'] == document.path
+
+def test_can_patch_document_successfully(client):
+    document = DocumentFactory(name='old_name.txt')
+    db.session.commit()
+    expected_name = 'new_name.txt'
+
+    response = client.patch(f'/documents/{document.id}', json={
+        'name': expected_name
+    })
+    assert response.status_code == 200
+
+    response_json = response.get_json()
+    assert response_json['name'] == expected_name
+
+def test_can_delete_document_successfully(client):
+    document = DocumentFactory()
+    db.session.commit()
+
+    response = client.delete(f'/documents/{document.id}')
+    assert response.status_code == 204
+
+    assert db.session.get(Document, document.id) is None
+
