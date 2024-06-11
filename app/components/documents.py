@@ -1,4 +1,5 @@
 from flask import Blueprint, request, current_app, jsonify, make_response
+from sqlalchemy import select
 from werkzeug.utils import secure_filename
 import os
 import logging
@@ -63,3 +64,18 @@ def upload_file():
         }), 500)
 
     return make_response(jsonify(document_record.to_dict()), 200)
+
+@documents.route('/', methods=['GET'])
+def list_documents():
+    try:
+        stmt = select(Document)
+        results = db.session.execute(stmt).scalars().all()
+        documents = [doc.to_dict() for doc in results]
+    except Exception as e:
+        return make_response(jsonify({
+            'status': 'error',
+            'result': 'Internal Server Error',
+            'error': str(e)
+        }), 500)
+
+    return make_response(jsonify(documents), 200)

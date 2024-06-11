@@ -4,6 +4,7 @@ from io import BytesIO
 import pytest
 
 from app import create_app
+from app.database.factories.DocumentFactory import DocumentFactory
 from app.extensions import db
 
 class TestConfig:
@@ -82,3 +83,18 @@ def test_upload_file_successfully(client, monkeypatch):
     # Clean up
     if os.path.exists(expected_filepath):
         os.remove(expected_filepath)
+
+def test_list_documents_successfully(client, monkeypatch):
+    document1 = DocumentFactory()
+    db.session.commit()
+
+    document2 = DocumentFactory()
+    db.session.commit()
+
+    response = client.get('/documents/')
+    assert response.status_code == 200
+
+    response_json = response.get_json()
+    assert len(response_json) == 2
+    assert response_json[0]['name'] == document1.name
+    assert response_json[1]['name'] == document2.name
