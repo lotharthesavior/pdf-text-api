@@ -1,6 +1,8 @@
 
 # PDF Service
 
+[![Run Tests and Generate Coverage](https://github.com/lotharthesavior/pdf-text-api/actions/workflows/test-and-coverage.yml/badge.svg)](https://github.com/lotharthesavior/pdf-text-api/actions/workflows/test-and-coverage.yml)
+
 Aims to provide a simple service to extract content from PDFs via API.
 
 ## API
