@@ -9,3 +9,6 @@ reportlab==4.2.0
 load-dotenv==0.1.0
 alembic==1.13.1
 factory-boy==3.3.0
+boto3==1.34.125
+botocore==1.34.125
+moto[ec2,s3,all]==5.0.9

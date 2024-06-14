@@ -4,6 +4,7 @@ from werkzeug.utils import secure_filename
 import os
 import uuid
 
+from app.components.storage import upload_file_to_minio
 from app.logger import logger
 from app.extensions import db
 from app.models import Document
@@ -15,6 +16,8 @@ def allowed_file(filename):
 
 @documents.route('/', methods=['POST'])
 def upload_file():
+    error = False
+
     if 'file' not in request.files:
         return make_response(jsonify({
             'status': 'error',
@@ -42,7 +45,10 @@ def upload_file():
 
     try:
         file.save(filepath)
-        logger.info(f'File {filename} uploaded')
+
+        if (current_app.config['STORAGE_TYPE'] is 'minio'):
+            upload_file_to_minio(filepath, current_app.config['STORAGE_DOCUMENTS_BUCKET'], unique_filename)
+            logger.info(f'File {unique_filename} uploaded')
 
         document_record = Document(
             name=filename,
@@ -52,8 +58,8 @@ def upload_file():
         db.session.commit()
         logger.info(f'Document {filename} persisted')
     except Exception as e:
+        error = True
         db.session.rollback()
-        os.remove(filepath)
         logger.error(f'Error saving document.', {
             'error': str(e)
         })
@@ -62,6 +68,9 @@ def upload_file():
             'result': 'Internal Server Error',
             'error': str(e)
         }), 500)
+    finally:
+        if (current_app.config['STORAGE_TYPE'] is not 'local') or error:
+            os.remove(filepath)
 
     return make_response(jsonify(document_record.to_dict()), 200)
 

@@ -1,20 +1,27 @@
 import os
 import uuid
 from io import BytesIO
+
+import boto3
+from moto import mock_aws
 import pytest
-from flask import jsonify
 
 from app import create_app
 from app.database.factories.DocumentFactory import DocumentFactory
 from app.extensions import db
 from app.models import Document
 
-
 class TestConfig:
     TESTING = True
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
     UPLOAD_FOLDER = 'test_uploads'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    STORAGE_TYPE = 'minio'
+    STORAGE_URL = None
+    STORAGE_ACCESS_KEY = 'fake_access_key'
+    STORAGE_SECRET_KEY = 'fake_secret_key'
+    STORAGE_REGION = 'us-east-1'
+    STORAGE_DOCUMENTS_BUCKET = 'test_bucket'
 
 @pytest.fixture
 def app():
@@ -40,7 +47,6 @@ def app():
 def client(app):
     return app.test_client()
 
-
 def test_cant_upload_without_file(client):
     response = client.post('/documents/')
     assert response.status_code == 422
@@ -61,11 +67,15 @@ def test_cant_upload_file_not_allowed_filetype(client):
         'file': (BytesIO(b"dummy data"), 'test.exe')
     }
     response = client.post('/documents/', data=data, content_type='multipart/form-data')
-    print(response.data)
     assert response.status_code == 422
     assert 'File not allowed' in response.data.decode()
 
-def test_upload_file_successfully(client, monkeypatch):
+@mock_aws
+def test_upload_file_successfully_with_s3(client, monkeypatch):
+    # Create a bucket
+    conn = boto3.resource("s3", region_name="us-east-1")
+    conn.create_bucket(Bucket=TestConfig.STORAGE_DOCUMENTS_BUCKET)
+
     # Mock the UUID generation to get a predictable filename
     test_uuid = uuid.uuid4()
     monkeypatch.setattr(uuid, 'uuid4', lambda: test_uuid)
@@ -73,19 +83,51 @@ def test_upload_file_successfully(client, monkeypatch):
     data = {
         'file': (BytesIO(b"dummy data"), 'test.txt')
     }
+
     response = client.post('/documents/', data=data, content_type='multipart/form-data')
 
     expected_filename = f"{test_uuid}_test.txt"
     expected_filepath = os.path.join('test_uploads', expected_filename)
 
+    body = conn.Object(TestConfig.STORAGE_DOCUMENTS_BUCKET, expected_filename).get()["Body"].read().decode("utf-8")
+
     assert response.status_code == 200
     response_json = response.get_json()
     assert response_json['name'] == 'test.txt'
-    assert os.path.exists(expected_filepath)
+    assert(body == "dummy data")
 
     # Clean up
     if os.path.exists(expected_filepath):
         os.remove(expected_filepath)
+
+def test_upload_file_successfully(app, client, monkeypatch):
+    # Mock the UUID generation to get a predictable filename
+    test_uuid = uuid.uuid4()
+    monkeypatch.setattr(uuid, 'uuid4', lambda: test_uuid)
+
+    with app.app_context():
+        app.config['STORAGE_TYPE'] = 'local'
+
+        test_uuid = uuid.uuid4()
+        monkeypatch.setattr(uuid, 'uuid4', lambda: test_uuid)
+
+        data = {
+            'file': (BytesIO(b"dummy data"), 'test.txt')
+        }
+
+        response = client.post('/documents/', data=data, content_type='multipart/form-data')
+
+        expected_filename = f"{test_uuid}_test.txt"
+        expected_filepath = os.path.join('test_uploads', expected_filename)
+
+        assert response.status_code == 200
+        assert os.path.exists(expected_filepath)
+        response_json = response.get_json()
+        assert response_json['name'] == 'test.txt'
+
+        # Clean up
+        if os.path.exists(expected_filepath):
+            os.remove(expected_filepath)
 
 def test_list_documents_successfully(client):
     document1 = DocumentFactory()
