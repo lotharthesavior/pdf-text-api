@@ -1,62 +1,76 @@
 import os
 import sys
 import pytest
-from flask import Flask
-from werkzeug.exceptions import HTTPException
+from moto import mock_aws
+
+from app.database.factories.DocumentFactory import DocumentFactory
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from app import handle_http_exception
-from app.components.pdf_toolset import pdf_toolset
+from app import db, create_app
+
+class TestConfig:
+    TESTING = True
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
+    UPLOAD_FOLDER = 'test_uploads'
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    STORAGE_TYPE = 'local'
+    PDF_SANITIZE = False
 
 @pytest.fixture
 def app():
-    app = Flask(__name__)
-    app.register_blueprint(pdf_toolset, url_prefix='/pdf_toolset')
-    app.register_error_handler(HTTPException, handle_http_exception)
-    yield app
+    app = create_app(config_class=TestConfig)
+    app.config['ALLOWED_EXTENSIONS'] = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
+
+    if not os.path.exists('test_uploads'):
+        os.makedirs('test_uploads')
+
+    with app.app_context():
+        db.create_all()
+        yield app
+        db.drop_all()
+
+    # Clean up uploads folder after tests
+    for filename in os.listdir('test_uploads'):
+        file_path = os.path.join('test_uploads', filename)
+        if os.path.isfile(file_path):
+            os.unlink(file_path)
 
 @pytest.fixture
 def client(app):
     return app.test_client()
 
-def test_cant_extract_text_from_pdf_without_pdf_file(client):
-    response = client.get('/pdf_toolset/')
-    assert response.status_code == 400
-    assert b"Parameter 'pdf_file' is required and must be a non-empty string." in response.data
-
+@mock_aws
 def test_cant_extract_text_from_pdf_with_invalid_page(client):
-    dummy_file = "uploads/test.pdf"
+    document = DocumentFactory()
+    document.path = "uploads/test.pdf"
+    db.session.commit()
+
+    dummy_file = document.path
     with open(dummy_file, "w") as f:
         f.write("This is a test file.")
 
-    response = client.get('/pdf_toolset/?pdf_file=test.pdf&page=invalid')
+    response = client.get(f'/pdf-text/{document.id}?page=invalid')
     assert response.status_code == 400
-    assert b"Parameter 'page' must be an integer." in response.data
+    assert b"Invalid page number" in response.data
 
     # Clean up the dummy file
     os.remove(dummy_file)
 
+@mock_aws
 def test_cant_extract_text_from_pdf_file_when_not_exist(client):
-    response = client.get('/pdf_toolset/?pdf_file=nonexistent.pdf&page=1')
-    assert response.status_code == 400
-    assert b"The specified file does not exist." in response.data
+    document_id = 9999999
+    response = client.get(f'/pdf-text/{document_id}?page=1')
+    assert response.status_code == 404
+    assert f"Document with id {document_id} not found." in str(response.data)
 
-def test_extract_text_from_pdf_not_pdf(client):
-    # Create a dummy file
-    dummy_file = "uploads/test.txt"
-    with open(dummy_file, "w") as f:
-        f.write("This is a test file.")
-
-    response = client.get('/pdf_toolset/?pdf_file=test.txt&page=1')
-    assert response.status_code == 400
-    assert b"The specified file must be a PDF." in response.data
-
-    # Clean up the dummy file
-    os.remove(dummy_file)
-
+@mock_aws
 def test_extract_text_from_pdf_success(client):
+    document = DocumentFactory()
+    document.path = "uploads/test.pdf"
+    db.session.commit()
+
     # Create a dummy PDF file
-    dummy_pdf = "uploads/test.pdf"
+    dummy_pdf = document.path
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
 
@@ -65,7 +79,7 @@ def test_extract_text_from_pdf_success(client):
     c.showPage()
     c.save()
 
-    response = client.get('/pdf_toolset/?pdf_file=test.pdf&page=1')
+    response = client.get(f"/pdf-text/{document.id}?page=1")
     assert response.status_code == 200
     data = response.get_json()
     assert data['number_of_pages'] == 1

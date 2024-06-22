@@ -10,4 +10,5 @@ class DocumentFactory(SQLAlchemyModelFactory):
 
     id = factory.Sequence(lambda n: n)
     name = factory.Faker('file_name')
+    unique_name = factory.Faker('file_name')
     path = factory.Faker('file_path')

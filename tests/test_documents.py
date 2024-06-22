@@ -22,6 +22,7 @@ class TestConfig:
     STORAGE_SECRET_KEY = 'fake_secret_key'
     STORAGE_REGION = 'us-east-1'
     STORAGE_DOCUMENTS_BUCKET = 'test_bucket'
+    PDF_SANITIZE = False
 
 @pytest.fixture
 def app():
@@ -119,15 +120,19 @@ def test_upload_file_successfully(app, client, monkeypatch):
 
         expected_filename = f"{test_uuid}_test.txt"
         expected_filepath = os.path.join('test_uploads', expected_filename)
+        cleaned_expected_filepath = os.path.join('test_uploads', f"cleaned-{expected_filename}")
 
         assert response.status_code == 200
-        assert os.path.exists(expected_filepath)
+        assert os.path.exists(cleaned_expected_filepath)
         response_json = response.get_json()
         assert response_json['name'] == 'test.txt'
 
         # Clean up
         if os.path.exists(expected_filepath):
             os.remove(expected_filepath)
+
+        if os.path.exists(cleaned_expected_filepath):
+            os.remove(cleaned_expected_filepath)
 
 def test_list_documents_successfully(client):
     document1 = DocumentFactory()
@@ -178,3 +183,15 @@ def test_can_delete_document_successfully(client):
 
     assert db.session.get(Document, document.id) is None
 
+def test_upload_file_too_large(app, client):
+    large_data = b"a" * (4 * 1024 * 1024 + 1)  # 4MB + 1 byte
+    data = {
+        'file': (BytesIO(large_data), 'large_test.txt')
+    }
+
+    response = client.post('/documents/', data=data, content_type='multipart/form-data')
+    assert response.status_code == 422
+    assert response.get_json() == {
+        'status': 'error',
+        'result': 'File exceeds size limit of 4MB'
+    }

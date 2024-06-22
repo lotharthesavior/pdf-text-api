@@ -1,41 +1,67 @@
-from flask import Blueprint, request, jsonify, abort
-from pypdf import PdfReader
+from flask import Blueprint, request, jsonify, abort, current_app
+from pypdf import PdfReader, PdfWriter
 import logging
-import os
+
+from pypdf.generic import DictionaryObject, NameObject, ArrayObject
+
 from app.logger import logger
+from app.models import Document
+import os
+import io
+
+from app.storage import get_client
 
 pdf_toolset = Blueprint('pdf_toolset', __name__)
 
-def validate_text_input(pdf_file: str, page):
-    # Validate pdf_file
-    if not pdf_file or not isinstance(pdf_file, str):
-        logger.error("Parameter 'pdf_file' is required and must be a non-empty string.")
-        abort(400, description="Parameter 'pdf_file' is required and must be a non-empty string.")
+def get_document_record_by_id(document_id):
+    document = Document.query.filter_by(id=document_id).first()
+    if not document:
+        logger.error(f"Document with id {document_id} not found.")
+        abort(404, description=f"Document with id {document_id} not found.")
+    return document
 
-    file_path = f"uploads/{pdf_file}"
-    if not os.path.exists(file_path):
-        logger.error(f"The specified file '{pdf_file}' does not exist.")
-        abort(400, description="The specified file does not exist.")
+def sanitize_pdf(input, output):
+    print(f"Sanitizing PDF {input} to {output}")
 
-    if not pdf_file.lower().endswith('.pdf'):
-        logger.error("The specified file must be a PDF.")
-        abort(400, description="The specified file must be a PDF.")
+    with open(input, 'rb') as file:
+        reader = PdfReader(file)
+        writer = PdfWriter()
 
-    # Validate page
+        writer.add_metadata({})
+
+        for page_num in range(len(reader.pages)):
+            page = reader.pages[page_num]
+
+            if "/Annots" in page:
+                page[NameObject("/Annots")] = ArrayObject()
+
+            writer.add_page(page)
+
+        with open(output, 'wb') as output_file:
+            print(f"Writing sanitized PDF to {output}")
+            writer.write(output_file)
+
+@pdf_toolset.route('/<int:id>', methods=['GET'])
+def extract_text_from_pdf(id: int):
+    page = request.args.get('page')
+    logging.info(f"Extracting text from page {page} of document {id}")
+
+    document = get_document_record_by_id(id)
+
     try:
         page = int(page)
-    except (ValueError, TypeError):
-        logger.error("Parameter 'page' must be an integer.")
-        abort(400, description="Parameter 'page' must be an integer.")
+    except Exception as e:
+        logger.error(f"Invalid page number: {str(e)}")
+        abort(400, description=f"Invalid page number: {str(e)}")
 
-@pdf_toolset.route('/', methods=['GET'])
-def extract_text_from_pdf():
-    pdf_file = request.args.get('pdf_file')
-    page = request.args.get('page')
-    logging.info(f"Extracting text from page {page} of {pdf_file}")
-    validate_text_input(pdf_file, page)
+    if (current_app.config['STORAGE_TYPE'] == 'minio'):
+        response_object = get_client().get_object(Bucket=current_app.config['STORAGE_DOCUMENTS_BUCKET'], Key=document.unique_name)
+        pdf_data = response_object['Body'].read()
+        pdf_stream = io.BytesIO(pdf_data)
+        reader = PdfReader(pdf_stream)
+    else:
+        reader = PdfReader(f"{document.path}")
 
-    reader = PdfReader(f"uploads/{pdf_file}")
     number_of_pages = len(reader.pages)
 
     try:
@@ -44,8 +70,9 @@ def extract_text_from_pdf():
         logger.error(f"Failed to extract text from page {page}: {str(e)}")
         abort(500, description=f"Failed to extract text from page {page}: {str(e)}")
 
-    logger.info(f"Successfully extracted text from page {page} of {pdf_file}")
+    logger.info(f"Successfully extracted text from page {page} of document {id}")
     return jsonify({
+        "document_name": document.name,
         "number_of_pages": number_of_pages,
         "text": text,
         "page": page

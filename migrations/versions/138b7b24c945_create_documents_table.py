@@ -23,6 +23,7 @@ def upgrade() -> None:
         'documents',
         sa.Column('id', sa.Integer(), nullable=False, autoincrement=True),
         sa.Column('name', sa.String(length=150), nullable=False),
+        sa.Column('unique_name', sa.String(length=150), nullable=False),
         sa.Column('path', sa.String(length=150), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=False), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=False), nullable=False),

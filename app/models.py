@@ -10,6 +10,7 @@ class Document(db.Model):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(150), nullable=False)
+    unique_name: Mapped[str] = mapped_column(String(150), nullable=False)
     path: Mapped[str] = mapped_column(String(150), nullable=False)
     updated_at: Mapped[Optional[DateTime]] = mapped_column(
         DateTime(timezone=False), default=datetime.utcnow, nullable=False
@@ -22,6 +23,7 @@ class Document(db.Model):
         return {
             'id': self.id,
             'name': self.name,
+            'unique_name': self.unique_name,
             'path': self.path,
             'updated_at': self.updated_at,
             'created_at': self.created_at
