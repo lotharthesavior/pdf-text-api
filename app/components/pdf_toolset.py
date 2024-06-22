@@ -2,11 +2,10 @@ from flask import Blueprint, request, jsonify, abort, current_app
 from pypdf import PdfReader, PdfWriter
 import logging
 
-from pypdf.generic import DictionaryObject, NameObject, ArrayObject
+from pypdf.generic import NameObject, ArrayObject
 
 from app.logger import logger
 from app.models import Document
-import os
 import io
 
 from app.storage import get_client

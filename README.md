@@ -9,23 +9,23 @@ Aims to provide a simple service to extract content from PDFs via API.
 
 ### PDF API
 
+### Updated Documentation for the `extract_text_from_pdf` Endpoint
+
 #### Endpoint: Extract Text from PDF
 
-This endpoint is for extracting text from a specified page of a PDF file.
+This endpoint extracts text from a specified page of a PDF file.
 
-- **URL**: `/pdf-text`
+- **URL**: `/pdf-text/<int:id>?page=<int:page>`
 - **Method**: `GET`
-- **Description**: Extracts text from a specified page of a given PDF file.
-- **Parameters**:
-  - `pdf_file` (string, required): The name of the PDF file (must be in the `uploads` directory).
-  - `page` (integer, required): The page number from which to extract text (1-based index).
+- **Description**: Extracts text from a specified page of a given PDF file (by document id).
 - **Responses**:
   - `200 OK`: Successfully extracted text.
     - Content:
       ```json
       {
+          "document_name": "str",
           "number_of_pages": int,
-          "text": str,
+          "text": "str",
           "page": int
       }
       ```
@@ -33,28 +33,36 @@ This endpoint is for extracting text from a specified page of a PDF file.
     - Content:
       ```json
       {
-          "description": str
+          "description": "str"
+      }
+      ```
+  - `404 Not Found`: Document not found.
+    - Content:
+      ```json
+      {
+          "description": "Document with id <id> not found."
       }
       ```
   - `500 Internal Server Error`: Failed to extract text from the specified page.
     - Content:
       ```json
       {
-          "description": str
+          "description": "str"
       }
       ```
 
 ##### Request Example
 
-**GET** `/extract-text?pdf_file=example.pdf&page=1`
+**GET** `/pdf-text/1?page=1`
 
-##### Response Example
+##### Response Examples
 
 **Success (200 OK)**:
 ```json
 {
-    "number_of_pages": 5,
-    "text": "Extracted text from the specified page...",
+    "document_name": "example.pdf",
+    "number_of_pages": 3,
+    "text": "This is the text extracted from page 1.",
     "page": 1
 }
 ```
@@ -62,30 +70,35 @@ This endpoint is for extracting text from a specified page of a PDF file.
 **Error (400 Bad Request)**:
 ```json
 {
-    "description": "Parameter 'pdf_file' is required and must be a non-empty string."
+    "description": "Invalid page number: <error_message>"
+}
+```
+
+**Error (404 Not Found)**:
+```json
+{
+    "description": "Document with id 1 not found."
 }
 ```
 
 **Error (500 Internal Server Error)**:
 ```json
 {
-    "description": "Failed to extract text from page 1: <error message>"
+    "description": "Failed to extract text from page 1: <error_message>"
 }
 ```
 
 ##### Detailed Explanation
 
 1. **Validation**:
-   - The `validate_text_input` function checks if `pdf_file` is a valid non-empty string, exists in the `uploads` directory, and has a `.pdf` extension.
-   - It also validates that `page` is an integer.
+   - The endpoint retrieves the document text by its ID. If the document is not found, a `404 Not Found` error is returned.
+   - If the validation fails, a `400 Bad Request` error is returned.
 
-2. **Text Extraction**:
-   - The `extract_text_from_pdf` function uses `PdfReader` to read the specified PDF file and extract text from the given page.
-   - The function logs the operation and handles any exceptions that occur during text extraction.
-
-3. **Responses**:
-   - Returns the total number of pages in the PDF, the extracted text, and the page number.
-   - Handles and returns appropriate error messages for invalid inputs or extraction failures.
+2. **Responses**:
+   - **Success (200 OK)**: Returns the document name, total number of pages, extracted text, and the page number.
+   - **Error (400 Bad Request)**: Returns a description of the error if the input parameters are invalid.
+   - **Error (404 Not Found)**: Returns a description if the document is not found.
+   - **Error (500 Internal Server Error)**: Returns a description of the error if text extraction fails.
 
 ### Document Management API
 
